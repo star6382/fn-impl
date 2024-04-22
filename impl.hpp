@@ -1,155 +1,38 @@
 #include "sdk.hpp"
 #include <__msvc_chrono.hpp>
 
-std::vector<Caches::FortPawnCache> TempCache;
-tarray<AFortPawn*> ReturnArray;
-
 inline unsigned __int64 CurrentFrame = 0;
 inline std::chrono::time_point<std::chrono::steady_clock> CurrentTime;
 
-namespace FortPawn {
-	void Tick();
-	void Update_Tick();
-
-	enum BoneID_ : uint8_t {
-		Head = 1,           // "head"
-		Neck = 2,           // "neck_01"
-
-		// Bottom contains the root component position. We have two with the same value for code readability
-		Root = 3,           // "Root"
-
-		ChestLeft = 4,	    // "clavicle_l"
-		ChestRight = 5,     // "clavicle_r"
-
-		// There is no chest bone, so this is a dummy value used for the hierarchy, chest should be calculated based on left and right chest bones
-		Chest = 6,          // none
-
-		LeftShoulder = 7,   // "upperarm_l"
-		LeftElbow = 8,	    // "lowerarm_l"
-		LeftHand = 9,	    // "Hand_L"
-		RightShoulder = 10, // "upperarm_r"
-		RightElbow = 11,    // "lowerarm_r"
-		RightHand = 12,	    // "hand_r"
-
-		LeftLeg = 13,	    // "thigh_l"
-		LeftKnee = 14,	    // "calf_l"
-		LeftFoot = 15,	    // "foot_l"
-		RightLeg = 16,	    // "thigh_r"
-		RightKnee = 17,	    // "calf_r"
-		RightFoot = 18,	    // "foot_r"
-
-		Pelvis = 19,	    // "pelvis"
-
-		BONEID_MAX = 20,           // Max value for looping
-
-		None = 0,		    // "None"
-	};
-
-	inline std::vector<Caches::FortPawnCache> CachedPlayers;
-
-	inline const float IntervalSeconds = 0.25f;
-	inline std::chrono::steady_clock::time_point LastCacheTime = std::chrono::steady_clock::now();
-}
-
-bool PopulateBones(Caches::FortPawnCache& FortPawnCache) {
-	// Resize the bone register to avoid out of range errors
-	FortPawnCache.BonePositions3D.resize(FortPawn::BoneID_::BONEID_MAX);
-	FortPawnCache.BonePositions2D.resize(FortPawn::BoneID_::BONEID_MAX);
-	FortPawnCache.BoneVisibilityStates.resize(FortPawn::BoneID_::BONEID_MAX);
-
-	bool FoundBoneOnScreen = false;
-
-	for (int i = FortPawn::BoneID_::Head; i < FortPawn::BoneID_::BONEID_MAX; i++) {
-		FortPawnCache.BonePositions3D[i] = FortPawnCache.Mesh->GetBonePosition(i);
-
-		if (i == FortPawn::BoneID_::Head) {
-			if (FortPawnCache.BonePositions3D[FortPawn::BoneID_::Head] == FVector(0, 0, 0)) {
-				return false;
-			}
-		}
-
-		if (i == FortPawn::BoneID_::Chest) {
-			FortPawnCache.BonePositions3D[FortPawn::BoneID_::Chest] = (FortPawnCache.BonePositions3D[FortPawn::BoneID_::ChestLeft] + FortPawnCache.BonePositions3D[FortPawn::BoneID_::ChestRight]) /*/ 2*/;
-		}
-
-		// To avoid W2Sing players that aren't on the screen
-		if (i <= 5 || FoundBoneOnScreen) {
-			FortPawnCache.BonePositions2D[i] = SDK::Project(FortPawnCache.BonePositions3D[i]);
-
-			if (IsOnScreen(FortPawnCache.BonePositions2D[i])) {
-				FoundBoneOnScreen = true;
-			}
-		}
-	}
-
-	return FoundBoneOnScreen;
-}
-
-//void Features::FortPawnHelper::PopulateVisibilities(Actors::Caches::FortPawnCache& FortPawnCache) {
-//	// Resize the vectors to the maximum bone ID
-//	FortPawnCache.BonePositions3D.resize(Bone::BONEID_MAX);
-//	FortPawnCache.BonePositions2D.resize(Bone::BONEID_MAX);
-//	FortPawnCache.BoneVisibilityStates.resize(Bone::BONEID_MAX);
-//
-//	// Loop over each bone ID
-//	for (int boneId = 0; boneId < Bone::BONEID_MAX; ++boneId) {
-//		// Check if the bone position is visible
-//		bool isVisible = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[boneId], FortPawnCache.FortPawn, SDK::GetLocalPawn());
-//
-//		// Update the visibility state of the bone
-//		FortPawnCache.BoneVisibilityStates[boneId] = isVisible;
-//	}
-//}
-
-void PopulateVisibilities(Caches::FortPawnCache& FortPawnCache) {
-	FortPawnCache.BonePositions3D.resize(FortPawn::BoneID_::BONEID_MAX);
-	FortPawnCache.BonePositions2D.resize(FortPawn::BoneID_::BONEID_MAX);
-	FortPawnCache.BoneVisibilityStates.resize(FortPawn::BoneID_::BONEID_MAX);
-
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::Head] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::Head], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::Chest] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::Chest], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftShoulder] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftShoulder], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightShoulder] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightShoulder], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftElbow] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftElbow], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightElbow] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightElbow], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftHand] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftHand], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightHand] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightHand], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftLeg] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftLeg], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightLeg] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightLeg], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftKnee] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftKnee], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightKnee] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightKnee], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::LeftFoot] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::LeftFoot], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::RightFoot] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::RightFoot], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-	FortPawnCache.BoneVisibilityStates[FortPawn::BoneID_::Pelvis] = SDK::IsPositionVisible(FortPawnCache.FortPawn, FortPawnCache.BonePositions3D[FortPawn::BoneID_::Pelvis], FortPawnCache.FortPawn, player_struct._world.GetLocalPawn());
-}
-
-void PopulateBoundCorners(Caches::FortPawnCache& FortPawnCache, fvector2d& TopLeft, fvector2d& BottomRight) {
-	TopLeft = fvector2d(FLT_MAX, FLT_MAX);
-	BottomRight = fvector2d(-FLT_MAX, -FLT_MAX);
-
-	for (int i = FortPawn::BoneID_::Head; i < FortPawn::BoneID_::BONEID_MAX; i++) {
-		TopLeft.x = min(TopLeft.x, FortPawnCache.BonePositions2D[i].x);
-		TopLeft.y = min(TopLeft.y, FortPawnCache.BonePositions2D[i].y);
-
-		BottomRight.x = max(BottomRight.x, FortPawnCache.BonePositions2D[i].x);
-		BottomRight.y = max(BottomRight.y, FortPawnCache.BonePositions2D[i].y);
-	}
-	
-	// Adjust the bounding box to make it more visually appealing
-	float BoxSizeMultiplier = CalculateInterpolatedValue(FortPawnCache.DistanceFromLocalPawn, 100.f, 1.0f, 4.0f);
-
-	// Increase the size of the bounding box by a percentage of the original size. This is to make the bounding box more visually appealing.
-	float LeftRightOffset = (BottomRight.x - TopLeft.x) * (0.36f * BoxSizeMultiplier);
-	float TopBottomOffset = (BottomRight.y - TopLeft.y) * (0.14f * BoxSizeMultiplier);
-
-	TopLeft.x -= LeftRightOffset;
-	TopLeft.y -= TopBottomOffset;
-
-	BottomRight.x += LeftRightOffset;
-	BottomRight.y += TopBottomOffset;
-}
+std::vector<Caches::FortPawnCache> TempCache;
+tarray<uobject*> ReturnArray;
 
 void FortPawn::Tick() {
+	double ElapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(CurrentTime - FortPawn::LastCacheTime).count();
+	if (ElapsedTime >= FortPawn::IntervalSeconds) {
+		FortPawn::LastCacheTime = CurrentTime;
+
+		ReturnArray = engine_structure::engine_objects::gameplaystatistics->get_all_actors_of_class((uobject*)uworld, SDK::AFortPawn::StaticClass());
+		for (int i = 0; i < ReturnArray.Num(); i++) {
+			Caches::FortPawnCache FortPawnCache{};
+
+			FortPawnCache.FortPawn = reinterpret_cast<AFortPawn*, true>(ReturnArray[i]);
+			/*	SDK::APlayerState* PlayerState = FortPawnCache.FortPawn->PlayerState();
+				if (SDK::IsValidPointer(PlayerState)) {
+					FortPawnCache.PlayerName = PlayerState->GetPlayerName();
+					FortPawnCache.TeamIndex = SDK::Cast<SDK::AFortPlayerState>(PlayerState)->TeamIndex();
+				}*/
+
+			FortPawnCache.BonePositions3D.resize(FortPawn::BoneID_::BONEID_MAX);
+			FortPawnCache.BonePositions2D.resize(FortPawn::BoneID_::BONEID_MAX);
+			FortPawnCache.BoneVisibilityStates.resize(FortPawn::BoneID_::BONEID_MAX);
+
+			TempCache.push_back(FortPawnCache);
+		}
+
+		FortPawn::CachedPlayers = TempCache;
+	}
+
 	std::vector<Caches::FortPawnCache> CachedPlayersLocal = FortPawn::CachedPlayers;
 	for (auto it = CachedPlayersLocal.begin(); it != CachedPlayersLocal.end(); ++it) {
 		Caches::FortPawnCache& CurrentPlayer = *it;
@@ -159,48 +42,70 @@ void FortPawn::Tick() {
 
 		// LocalPawn caching and exploit ticks
 		if (FortPawn == player_struct._world.GetLocalPawn()) {
-
-			//LocalPawnCache.Position = CurrentPlayer.Mesh->GetBonePosition(FortPawn::BoneID_::Head);		
-
+			LocalPawnCache.Position = CurrentPlayer.Mesh->GetBonePosition(FortPawn::BoneID_::Head);
+			// call any tick you want actors...
+			// or call expoilts
 			continue;
 		}
-	}
 
+		// Bone positions and visibility caching
+		// If this returns false, the player isn't on the screen and only 5 of the bones were WorldToScreened
+		CurrentPlayer.IsBoneRegister2DPopulated = PopulateBones(CurrentPlayer);
+		PopulateVisibilities(CurrentPlayer);
 
+		// Update IsPlayerVisibleOnScreen based on if any of the bones 2D positions are on the screen
+		CurrentPlayer.IsPlayerVisibleOnScreen = false;
+		for (int i = 0; i < CurrentPlayer.BonePositions2D.size(); i++) {
+			if (CurrentPlayer.BonePositions2D[i] == FVector2D()) continue;
 
-	//cheat here
+			if (IsOnScreen(CurrentPlayer.BonePositions2D[i])) {
+				CurrentPlayer.IsPlayerVisibleOnScreen = true;
+			}
+		}
 
+		CurrentPlayer.DistanceFromLocalPawn = LocalPawnCache.Position.Distance(CurrentPlayer.BonePositions3D[FortPawn::BoneID_::Root]) / 100.f;
 
+		// Hardcoded max distance, should move to bone population for optimisation
+		if (CurrentPlayer.DistanceFromLocalPawn > 500.f) continue;
 
+		// Update any bone visibility
+		CurrentPlayer.IsAnyBoneVisible = false;
+		for (int i = 0; i < CurrentPlayer.BoneVisibilityStates.size(); i++) {
+			if (CurrentPlayer.BoneVisibilityStates[i]) {
+				CurrentPlayer.IsAnyBoneVisible = true;
+				break;
+			}
+		}
 
-}
+		// Visuals
+		if (CurrentPlayer.IsPlayerVisibleOnScreen) {
+			FVector2D TopLeft, BottomRight;
+			PopulateBoundCorners(CurrentPlayer, TopLeft, BottomRight);
 
-void FortPawn::Update_Tick() { {
-		double ElapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(CurrentTime - FortPawn::LastCacheTime).count();
+			float FontSize = CalculateInterpolatedValue(150.f, CurrentPlayer.DistanceFromLocalPawn, 12.f, 20.f);
+			float PrimaryThicknessMultiplier = CalculateInterpolatedValue(75.f, CurrentPlayer.DistanceFromLocalPawn, 1.f, 3.f);
+			float SecondaryThicknessMultiplier = CalculateInterpolatedValue(75.f, CurrentPlayer.DistanceFromLocalPawn, 1.f, 2.f);
 
-		if (ElapsedTime >= FortPawn::IntervalSeconds) {
-			FortPawn::LastCacheTime = CurrentTime;
+			float PrimaryThickness = 1.f * PrimaryThicknessMultiplier;
+			float SecondaryThickness = 1.f * SecondaryThicknessMultiplier;
 
-			/*ReturnArray = SDK::UGameplayStatics::GetAllActorsOfClass(SDK::GetWorld(), SDK::AFortPawn::StaticClass())*/
-
-			for (int i = 0; i < ReturnArray.size(); i++) {
-				Caches::FortPawnCache FortPawnCache{};
-
-				FortPawnCache.FortPawn = reinterpret_cast<AFortPawn*, true>(ReturnArray[i]);
-			/*	SDK::APlayerState* PlayerState = FortPawnCache.FortPawn->PlayerState();
-				if (SDK::IsValidPointer(PlayerState)) {
-					FortPawnCache.PlayerName = PlayerState->GetPlayerName();
-					FortPawnCache.TeamIndex = SDK::Cast<SDK::AFortPlayerState>(PlayerState)->TeamIndex();
-				}*/
-
-				FortPawnCache.BonePositions3D.resize(FortPawn::BoneID_::BONEID_MAX);
-				FortPawnCache.BonePositions2D.resize(FortPawn::BoneID_::BONEID_MAX);
-				FortPawnCache.BoneVisibilityStates.resize(FortPawn::BoneID_::BONEID_MAX);
-
-				TempCache.push_back(FortPawnCache);
+			flinearcolor PrimaryColor = flinearcolor(1.f, 1.f, 1.f, 1.f);
+			if (CurrentPlayer.IsAnyBoneVisible) {
+				PrimaryColor = flinearcolor(1.f, 0.f, 0.f, 1.f);
 			}
 
-			FortPawn::CachedPlayers = TempCache;
+			flinearcolor SecondaryColor = flinearcolor(1.0f, 0.f, 0.f, 1.0f);
+			if (CurrentPlayer.IsAnyBoneVisible) {
+				SecondaryColor = flinearcolor(0.0f, 1.f, 1.f, 1.0f);
+			}
+
+			if (CurrentPlayer.IsPlayerVisibleOnScreen) {
+
+
+                        // your cheat esp here...
+
+
+			}
 		}
 	}
 }
@@ -218,8 +123,16 @@ void DrawTransition(UGameViewportClient* ViewPortClient, UCanvas* Canvas) {
 		return;
 	}
 
+	//FortPawn::Update_Tick();
 	FortPawn::Tick();
-	FortPawn::Update_Tick();
 
 	return DrawTransitionOriginal(ViewPortClient, Canvas);
 }
+
+
+// Update the current weapon and magazine ammo count
+/*	SDK::AFortWeapon* CurrentWeapon = FortPawn->CurrentWeapon();
+	if (CurrentWeapon != CurrentPlayer.Weapon) {
+		CurrentPlayer.Weapon = CurrentWeapon;
+		CurrentPlayer.BulletsPerClip = CurrentWeapon->GetBulletsPerClip();
+	}*/
